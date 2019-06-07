@@ -1,5 +1,7 @@
 const express = require('express');
 const app = express();
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 //json parser middleware from express
 app.use(express.json());
@@ -30,10 +32,10 @@ app.get('/', (req, res) => {
 });
 
 app.post('/signin', (req, res) => {
-  if (
-    req.body.email === database.users[0].email &&
-    req.body.password === database.users[0].password
-  ) {
+  const { email, password } = req.body;
+  let passCheck = bcrypt.compareSync(password, database.users[2].password); // true
+
+  if (email === database.users[2].email && passCheck) {
     res.json('signing in: success');
   } else {
     res.status(400).json('error logging in');
@@ -42,15 +44,19 @@ app.post('/signin', (req, res) => {
 
 app.post('/register', (req, res) => {
   const { name, email, password } = req.body;
-  database.users.push({
-    id: '125',
-    name: name,
-    email: email,
-    password: password,
-    entries: 0,
-    joined: new Date()
+  bcrypt.hash(password, saltRounds, function(err, hash) {
+    // Store hash in your password DB.
+    console.log(hash);
+    database.users.push({
+      id: '125',
+      name: name,
+      email: email,
+      password: hash,
+      entries: 0,
+      joined: new Date()
+    });
+    res.json(database.users[database.users.length - 1]);
   });
-  res.json(database.users[database.users.length - 1]);
 });
 
 app.get('/profile/:id', (req, res) => {

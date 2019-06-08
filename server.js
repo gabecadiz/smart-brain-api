@@ -3,32 +3,22 @@ const app = express();
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 const cors = require('cors');
+const knex = require('knex');
+
+const db = knex({
+  client: 'pg',
+  connection: {
+    host: '127.0.0.1',
+    user: 'computer',
+    password: '',
+    database: 'smart-brain'
+  }
+});
 
 //json parser middleware from express
 app.use(express.json());
 //cors middleware
 app.use(cors());
-
-const database = {
-  users: [
-    {
-      id: '123',
-      name: 'John',
-      email: 'john@gmail.com',
-      password: 'password',
-      entries: 0,
-      joined: new Date()
-    },
-    {
-      id: '124',
-      name: 'Sal',
-      email: 'sally@gmail.com',
-      password: 'password',
-      entries: 0,
-      joined: new Date()
-    }
-  ]
-};
 
 app.get('/', (req, res) => {
   res.send(database);
@@ -36,62 +26,92 @@ app.get('/', (req, res) => {
 
 app.post('/signin', (req, res) => {
   const { email, password } = req.body;
-  // let passCheck = bcrypt.compareSync(password, database.users[2].password); // true
-  //temporarily not using bcrypt for post signin
-  if (
-    email === database.users[0].email &&
-    password === database.users[0].password
-  ) {
-    res.json(database.users[0]);
-  } else {
-    res.status(400).json('error logging in');
-  }
+
+  db.select('email', 'hash')
+    .from('login')
+    .where({ email })
+    .then(data => {
+      const isValid = bcrypt.compareSync(password, data[0].hash);
+      if (isValid) {
+        return db
+          .select('*')
+          .from('users')
+          .where({ email })
+          .then(user => {
+            res.json(user[0]);
+          })
+          .catch(err => {
+            res.status(400).json('unable to get user');
+          });
+      } else {
+        res.status(400).json('error logging in - wrong credentials');
+      }
+    })
+    .catch(err => {
+      res.status(400).json('error logging in - wrong credentials');
+    });
 });
 
 app.post('/register', (req, res) => {
   const { name, email, password } = req.body;
-  bcrypt.hash(password, saltRounds, function(err, hash) {
-    // Store hash in your password DB.
-    console.log(hash);
-    database.users.push({
-      id: '125',
-      name: name,
-      email: email,
-      password: hash,
-      entries: 0,
-      joined: new Date()
-    });
-    res.json(database.users[database.users.length - 1]);
+  var hash = bcrypt.hashSync(password, saltRounds);
+  db.transaction(trx => {
+    trx
+      .insert({
+        email: email,
+        hash: hash
+      })
+      .into('login')
+      .returning('email')
+      .then(loginEmail => {
+        return trx('users')
+          .returning('*')
+          .insert({
+            name: name,
+            email: loginEmail[0],
+            joined: new Date()
+          })
+          .then(user => {
+            res.json(user[0]);
+          });
+      })
+      .then(trx.commit)
+      .catch(trx.rollback);
+  }).catch(err => {
+    res.status(400).json('unable to register');
   });
 });
 
 app.get('/profile/:id', (req, res) => {
   const { id } = req.params;
-  let found = false;
-  database.users.forEach(user => {
-    if (user.id === id) {
-      found = true;
-      return res.json(user);
-    }
-  });
-  if (!found) {
-    res.status(400).json('user not found');
-  }
+  db.select('*')
+    .from('users')
+    .where({ id })
+    .then(user => {
+      //if no user is found, empty array is returned. Therefore user.length is used to determine successful/unsuccessful query
+      if (user.length) {
+        res.json(user[0]);
+      } else {
+        res.status(400).json('user not found');
+      }
+    })
+    .catch(err => {
+      res.status(400).json('error finding user');
+    });
 });
 
 app.put('/images', (req, res) => {
   const { id } = req.body;
-  let found = false;
-  database.users.forEach(user => {
-    if (user.id === id) {
-      found = true;
-      user.entries++;
-      return res.json(user.entries);
-    }
-  });
-  if (!found) {
-    res.status(400).json('user not found');
-  }
+  db('users')
+    .where({ id })
+    .increment('entries', 1)
+    .returning('entries')
+    .then(entries => {
+      res.json(entries[0]);
+    })
+    .catch(err => {
+      res.status(400).json('unable to put entries');
+    });
 });
 
 app.listen(3003, () => {

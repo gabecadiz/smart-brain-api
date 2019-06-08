@@ -2,9 +2,12 @@ const express = require('express');
 const app = express();
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
+const cors = require('cors');
 
 //json parser middleware from express
 app.use(express.json());
+//cors middleware
+app.use(cors());
 
 const database = {
   users: [
@@ -33,10 +36,13 @@ app.get('/', (req, res) => {
 
 app.post('/signin', (req, res) => {
   const { email, password } = req.body;
-  let passCheck = bcrypt.compareSync(password, database.users[2].password); // true
-
-  if (email === database.users[2].email && passCheck) {
-    res.json('signing in: success');
+  // let passCheck = bcrypt.compareSync(password, database.users[2].password); // true
+  //temporarily not using bcrypt for post signin
+  if (
+    email === database.users[0].email &&
+    password === database.users[0].password
+  ) {
+    res.json('success');
   } else {
     res.status(400).json('error logging in');
   }
